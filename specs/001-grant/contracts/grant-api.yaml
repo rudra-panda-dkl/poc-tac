@@ -1,0 +1,149 @@
+openapi: 3.0.3
+info:
+  title: TAC Grant Flow — RP API (001-grant)
+  version: "1.0.0"
+  description: >
+    RP-local endpoints for the grant/issuance flow. Bespoke to this deployment (Constitution
+    Principle I) — not presented as, or required to conform to, any external authorization
+    standard. Consumed by user-client (ceremonies one and two) and agent-client (credential
+    presentation).
+paths:
+  /grant/authenticate/options:
+    get:
+      summary: Ceremony one — fetch WebAuthn authentication options (server-issued challenge)
+      description: >
+        Standard WebAuthn authentication ceremony options for the User's already-registered
+        passkey (FR-003). Passkey registration itself is a precondition, not served here.
+      responses:
+        "200":
+          description: WebAuthn PublicKeyCredentialRequestOptions (SimpleWebAuthn shape)
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Opaque SimpleWebAuthn generateAuthenticationOptions() output.
+
+  /grant/negotiate:
+    post:
+      summary: Ceremony one — verify authentication, negotiate scope/duration, issue grant nonce
+      description: >
+        Verifies the User's WebAuthn assertion against the RP's registered passkey record,
+        derives the assurance level from the assertion's UP/UV signals (FR-006), negotiates
+        scope/duration bounded by the Assurance Ceiling Policy for that level (FR-007a), persists
+        a `pending` Grant Record (FR-010), and returns the negotiated terms plus the RP identity
+        needed for Agent keypair scoping (FR-018a) — the negotiated scope/duration are NOT
+        included in what is disclosed to the Agent; this response is consumed by the User's
+        client only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assertionResponse, requestedScope, requestedDuration]
+              properties:
+                assertionResponse:
+                  type: object
+                  description: SimpleWebAuthn AuthenticationResponseJSON for the server-issued challenge from /grant/authenticate/options.
+                requestedScope:
+                  type: object
+                  description: User-proposed scope (opaque; 002-transact defines internal semantics — FR-020).
+                requestedDuration:
+                  type: object
+                  properties:
+                    validFrom: { type: string, format: date-time }
+                    validUntil: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Negotiation succeeded; pending Grant Record created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [nonce, agreedScope, agreedDuration, assuranceLevel, rpIdentifier, nonceExpiresAt]
+                properties:
+                  nonce: { type: string, description: "Grant-time nonce (FR-010); single-use (FR-014/FR-015)." }
+                  agreedScope: { type: object }
+                  agreedDuration:
+                    type: object
+                    properties:
+                      validFrom: { type: string, format: date-time }
+                      validUntil: { type: string, format: date-time }
+                  assuranceLevel: { type: string, description: "Recorded value; must match the credential's signed field at activation (FR-009)." }
+                  rpIdentifier: { type: string, description: "The only pre-delivery information the Agent may receive (FR-018a)." }
+                  nonceExpiresAt: { type: string, format: date-time, description: "nonceIssuedAt + 5 minutes by default, RP-configurable (FR-012)." }
+        "400":
+          description: Requested duration exceeds the assurance-level ceiling, or malformed request (FR-007a).
+        "401":
+          description: WebAuthn assertion failed verification.
+
+  /grant/activate:
+    post:
+      summary: Ceremony two — present signed credential; RP validates and activates the grant
+      description: >
+        Retrieves the Grant Record by the credential's `integrity.grantNonce`, marking it
+        consumed at retrieval — before any other check (FR-014, NON-NEGOTIABLE ordering). Then
+        validates, in any order internally but all required: nonce match against the retrieved
+        record, User signature over the JCS digest (FR-021), account/public-key match, terms
+        match (scope/duration), and assurance-level match (FR-009). Any single failure aborts the
+        entire attempt with no Grant Record created or activated as a side effect (User Story 2).
+        On success, transitions the record to `active` (FR-011).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Credential"
+      responses:
+        "200":
+          description: Grant activated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [active] }
+                  grantNonce: { type: string }
+        "409":
+          description: >
+            Nonce already consumed (prior success or prior failed attempt — FR-015), or nonce
+            expired (FR-013, record is/becomes `expired`).
+        "422":
+          description: >
+            Signature invalid, account mismatch, terms mismatch, or assurance-level mismatch
+            (FR-009) — record remains `pending`, no new record created (User Story 2).
+
+components:
+  schemas:
+    Credential:
+      type: object
+      description: See data-model.md "Entity: Credential" for full field-level detail.
+      required: [identity, scope, temporal, integrity]
+      properties:
+        identity:
+          type: object
+          required: [userPublicKey, agentPublicKey, rpIdentifier]
+          properties:
+            userPublicKey: { type: object }
+            agentPublicKey: { type: object, description: "JWK, ECDSA P-256 (ES256) — research.md §4." }
+            rpIdentifier: { type: string }
+        scope:
+          type: object
+          description: Opaque; 002-transact defines internal semantics (FR-020).
+        temporal:
+          type: object
+          required: [validFrom, validUntil]
+          properties:
+            validFrom: { type: string, format: date-time }
+            validUntil: { type: string, format: date-time }
+        integrity:
+          type: object
+          required: [grantNonce, assuranceLevel, userSignature]
+          properties:
+            grantNonce: { type: string }
+            assuranceLevel: { type: string }
+            userSignature:
+              type: string
+              description: >
+                WebAuthn assertion signature (base64url) over SHA-256(JCS(identity, scope,
+                temporal, assuranceLevel, grantNonce)) — FR-021, resolves OQ-6.

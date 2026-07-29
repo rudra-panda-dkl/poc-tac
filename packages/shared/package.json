@@ -1,0 +1,19 @@
+{
+  "name": "@tac/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "canonicalize": "^2.0.0",
+    "@simplewebauthn/types": "^10.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/node": "^20.14.15"
+  }
+}

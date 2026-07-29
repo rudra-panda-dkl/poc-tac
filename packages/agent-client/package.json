@@ -1,0 +1,20 @@
+{
+  "name": "@tac/agent-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "demo:keypair": "tsx src/demo/keypair.ts"
+  },
+  "dependencies": {
+    "@tac/shared": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "tsx": "^4.16.5",
+    "@types/node": "^20.14.15"
+  }
+}

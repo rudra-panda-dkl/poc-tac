@@ -1,0 +1,22 @@
+{
+  "name": "@tac/user-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "demo:negotiate": "tsx src/demo/negotiate.ts",
+    "demo:sign": "tsx src/demo/sign.ts"
+  },
+  "dependencies": {
+    "@tac/shared": "*",
+    "@simplewebauthn/browser": "^10.0.0",
+    "@simplewebauthn/types": "^10.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "tsx": "^4.16.5"
+  }
+}

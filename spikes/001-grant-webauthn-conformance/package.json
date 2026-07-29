@@ -1,0 +1,10 @@
+{
+  "name": "webauthn-conformance-spike",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "tasks.md T006 — Constitution Principle II conformance gate, run in isolation from the workspace packages",
+  "scripts": {
+    "spike": "node run-spike.mjs"
+  }
+}
