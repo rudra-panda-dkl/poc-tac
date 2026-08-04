@@ -1,0 +1,109 @@
+openapi: 3.0.3
+info:
+  title: TAC Grant Revocation Flow — RP API (003-revoke)
+  version: "1.0.0"
+  description: >
+    RP-local endpoints for lightweight, synchronous grant revocation (Constitution Principle
+    VIII). Bespoke to this deployment (Constitution Principle I) — not presented as, or required
+    to conform to, any external authorization standard. Consumed by user-client only;
+    agent-client has no role here (no Agent involvement in revocation, spec.md Edge Cases).
+paths:
+  /revoke/request:
+    post:
+      summary: Grant-state gate; issues a fresh single-use revocation challenge on success
+      description: >
+        Looks up the Grant Record by `grantNonce` (FR-001) and evaluates the Grant-state gate:
+        status MUST be `active` (FR-002) — `pending`, `expired`, or already-`revoked` are all
+        denied identically, not distinguished (spec.md FR-002/Edge Cases). On success, issues a
+        fresh `RevocationChallenge` bound to this exact `grantNonce` (FR-003), scoped to the
+        Grant owner's specific registered credential (research.md §2) — the caller never
+        specifies which account it claims to be; the RP derives it from the Grant Record itself.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grantNonce]
+              properties:
+                grantNonce:
+                  type: string
+                  description: Reference to the Grant Record to revoke (FR-001) — the same nonce 001-grant's GrantRecordStore uses as its key.
+      responses:
+        "200":
+          description: Grant-state gate passed; revocation challenge issued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [challengeId, options]
+                properties:
+                  challengeId: { type: string, description: "Opaque handle for /revoke/respond." }
+                  options:
+                    type: object
+                    description: >
+                      Opaque SimpleWebAuthn generateAuthenticationOptions() output (same shape
+                      /grant/authenticate/options returns), scoped to the Grant owner's
+                      registered credential via allowCredentials — the User's client passes this
+                      directly to startAuthentication() (FR-004).
+        "403":
+          description: >
+            Grant not active (`pending`, `expired`, or already-`revoked`) — no challenge issued
+            (mirrors SC-001's pattern from 002-transact). Also returned for an unknown/bogus
+            `grantNonce`, not distinguished from any other denial reason (spec.md Edge Cases).
+
+  /revoke/respond:
+    post:
+      summary: Challenge-response verification and revocation
+      description: >
+        Retrieves the `RevocationChallenge` by `challengeId`, marking it consumed at retrieval —
+        before any other check (FR-007, NON-NEGOTIABLE ordering, Constitution Principle V). Then
+        validates, all required: challenge was unconsumed at retrieval (FR-008), the target Grant
+        Record (read from the challenge's own stored `grantNonce` — never from this request body)
+        is still `active`, and the WebAuthn assertion's signature verifies against the passkey
+        registered for that Grant's owner (FR-005). Any single failure denies the request with the
+        Grant Record's status left unchanged (FR-002-adjacent, User Story 2). On success,
+        transitions the record to `revoked` (FR-010) and sends an explicit acknowledgment
+        (FR-011) — this feature's endpoint; 002-transact's existing Grant-state gate is what
+        makes this take effect on transactions with no propagation delay (FR-012), not anything
+        this endpoint does beyond the status write itself.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeId, assertionResponse]
+              properties:
+                challengeId: { type: string }
+                assertionResponse:
+                  type: object
+                  description: >
+                    SimpleWebAuthn AuthenticationResponseJSON for the challenge issued by
+                    /revoke/request (FR-004) — a standard WebAuthn assertion, not a
+                    locally-signed document (unlike 001-grant's ceremony two). No field here
+                    lets the caller assert which Grant it targets — that binding lives only in
+                    the RP's own stored challenge record (FR-006).
+      responses:
+        "200":
+          description: Grant revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, grantNonce]
+                properties:
+                  status: { type: string, enum: [revoked] }
+                  grantNonce: { type: string }
+        "409":
+          description: >
+            Challenge already consumed (prior success or prior failed attempt — FR-008), or
+            challenge expired (mirrors 002-transact's challenge_expired handling).
+        "403":
+          description: >
+            Target Grant no longer `active` at the moment of the respond-time re-check
+            (data-model.md validation rule) — distinct from the identical-looking gate at
+            /revoke/request, evaluated again here for the same reason 002-transact re-checks at
+            respond time (research.md §5 there).
+        "422":
+          description: Signature does not verify against the passkey registered for the target Grant's owner.

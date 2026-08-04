@@ -41,7 +41,7 @@ export function bufferToBase64url(buf: Uint8Array): string {
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-export function base64urlToBuffer(b64url: string): Uint8Array {
+export function base64urlToBuffer(b64url: string): Uint8Array<ArrayBuffer> {
   const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
   const bin = typeof atob === "function" ? atob(b64) : Buffer.from(b64, "base64").toString("binary");
   const buf = new Uint8Array(bin.length);

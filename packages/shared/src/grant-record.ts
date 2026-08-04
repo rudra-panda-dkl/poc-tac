@@ -1,8 +1,10 @@
 import type { AssuranceLevel, CredentialScope } from "./credential.js";
 
 /** Handoff contract for 002-transact (reads agreedScope/agreedDuration/status) and 003-revoke
- * (adds a `revoked` status reachable from `active`) — see specs/001-grant/data-model.md. */
-export type GrantRecordStatus = "pending" | "active" | "expired";
+ * (adds a `revoked` status reachable from `active`) — see specs/001-grant/data-model.md.
+ * `revoked` is 003-revoke's addition (FR-010, specs/003-revoke/data-model.md) — terminal,
+ * reachable only from `active`. */
+export type GrantRecordStatus = "pending" | "active" | "expired" | "revoked";
 
 export interface GrantRecord {
   nonce: string;

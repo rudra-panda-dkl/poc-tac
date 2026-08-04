@@ -18,10 +18,15 @@ export async function getOrCreateAgentKeypair(rpIdentifier: string): Promise<Age
   const existing = keypairsByRp.get(rpIdentifier);
   if (existing) return existing;
 
+  // WebCrypto splits `keyUsages` across the generated pair by what's valid for each key type:
+  // the private key gets "sign", the public key gets "verify" — passing only ["sign"] here
+  // left the exported public JWK with `key_ops: []` (no permitted operations), which was inert
+  // in 001-grant (nothing there ever imported the Agent's public key for "verify") but breaks
+  // 002-transact's RP-side signature verification, which is the first consumer that does.
   const keyPair = await crypto.subtle.generateKey(
     { name: "ECDSA", namedCurve: "P-256" },
     false, // private key non-extractable — cannot be exported even by this process's own code
-    ["sign"],
+    ["sign", "verify"],
   );
   const publicKeyJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
 

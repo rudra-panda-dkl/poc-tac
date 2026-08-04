@@ -7,7 +7,8 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -b",
-    "demo:keypair": "tsx src/demo/keypair.ts"
+    "demo:keypair": "tsx src/demo/keypair.ts",
+    "demo:transact": "tsx src/transact/demo-transact.ts"
   },
   "dependencies": {
     "@tac/shared": "*"
@@ -15,6 +16,7 @@
   "devDependencies": {
     "typescript": "^5.5.4",
     "tsx": "^4.16.5",
-    "@types/node": "^20.14.15"
+    "@types/node": "^20.14.15",
+    "@tac/user-client": "*"
   }
 }

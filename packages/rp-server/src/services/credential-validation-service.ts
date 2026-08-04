@@ -2,6 +2,7 @@ import type { Credential } from "@tac/shared";
 import { computeCredentialDigest, bufferToBase64url } from "@tac/shared";
 import { GrantRecordStore } from "../models/grant-record-store.js";
 import { RegisteredPasskeyStore } from "../models/registered-passkey-store.js";
+import { AgentKeyStore } from "../models/agent-key-store.js";
 import { verifyAssertion } from "./webauthn.js";
 
 export type ActivationRejectionReason =
@@ -20,11 +21,17 @@ export type ActivationOutcome = { ok: true } | { ok: false; reason: ActivationRe
  * can never leave the nonce redeemable for a second attempt (FR-015, User Story 3 Scenario 2).
  * The `active` transition (bottom of `activate()`) is the ONLY state-mutating write in the
  * success path, and it only runs after every check has passed — no partial-state writes occur
- * on any failure branch (User Story 2, FR-011). */
+ * on any failure branch (User Story 2, FR-011).
+ *
+ * `agentKeyStore` (002-transact, research.md §1): on that same success path, also records
+ * `credential.identity.agentPublicKey` keyed by grant nonce — the `Credential` itself is never
+ * persisted beyond this call, so this is the only point at which the Agent's public key can be
+ * captured for 002-transact's transaction-time signature verification to use later. */
 export class CredentialValidationService {
   constructor(
     private readonly grantStore: GrantRecordStore,
     private readonly passkeyStore: RegisteredPasskeyStore,
+    private readonly agentKeyStore: AgentKeyStore,
   ) {}
 
   async activate(credential: Credential): Promise<ActivationOutcome> {
@@ -79,6 +86,7 @@ export class CredentialValidationService {
 
     this.passkeyStore.updateCounter(registered.credentialID, verify.newCounter);
     this.grantStore.transitionToActive(record.nonce);
+    this.agentKeyStore.record(record.nonce, credential.identity.agentPublicKey);
     return { ok: true };
   }
 }

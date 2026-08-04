@@ -33,6 +33,16 @@ export class GrantRecordStore {
     return record;
   }
 
+  /** Non-consuming read, safe for production use — unlike `retrieveForVerification()`, this
+   * does NOT set `consumedAt` and may be called any number of times. 002-transact's
+   * `TransactionService` uses this to read `status`/`agreedScope`/`agreedDuration` for its
+   * Grant-state gate (FR-002/FR-003/FR-004) — those checks are non-destructive re-reads of an
+   * already-`active` Grant Record, not a second consumption of the grant-time nonce (which was
+   * already consumed once, by 001-grant's own `retrieveForVerification()` call at activation). */
+  get(nonce: string): GrantRecord | undefined {
+    return this.records.get(nonce);
+  }
+
   transitionToActive(nonce: string): void {
     const record = this.records.get(nonce);
     if (record) record.status = "active";
@@ -41,6 +51,15 @@ export class GrantRecordStore {
   transitionToExpired(nonce: string): void {
     const record = this.records.get(nonce);
     if (record) record.status = "expired";
+  }
+
+  /** 003-revoke (FR-010): mutates `status` in place on the object already held in `records`,
+   * so any subsequent `.get()` call — from any caller, including 002-transact's
+   * `TransactionService` — observes the change immediately, with no propagation delay
+   * (Constitution Principle VIII; specs/003-revoke/research.md §5). */
+  transitionToRevoked(nonce: string): void {
+    const record = this.records.get(nonce);
+    if (record) record.status = "revoked";
   }
 
   /** Test-only accessor — does NOT consume. Never call this from

@@ -8,7 +8,8 @@
   "scripts": {
     "build": "tsc -b",
     "demo:negotiate": "tsx src/demo/negotiate.ts",
-    "demo:sign": "tsx src/demo/sign.ts"
+    "demo:sign": "tsx src/demo/sign.ts",
+    "demo:revoke": "tsx src/demo/revoke.ts"
   },
   "dependencies": {
     "@tac/shared": "*",

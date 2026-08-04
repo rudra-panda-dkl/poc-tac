@@ -1,0 +1,111 @@
+openapi: 3.0.3
+info:
+  title: TAC Transaction Flow — RP API (002-transact)
+  version: "1.0.0"
+  description: >
+    RP-local endpoints for the transaction-time challenge-response flow. Bespoke to this
+    deployment (Constitution Principle I) — not presented as, or required to conform to, any
+    external authorization standard. Consumed by agent-client only; user-client has no role here
+    (no human present at transaction time, Constitution Principle VI).
+paths:
+  /transact/request:
+    post:
+      summary: Grant-state gate; issues a fresh single-use transaction challenge on success
+      description: >
+        Looks up the Grant Record by `grantNonce` (FR-001) and evaluates the Grant-state gate:
+        status MUST be `active` (FR-002), current time MUST fall within
+        `agreedDuration.validFrom`/`validUntil` (FR-003), and `{txType, amount}` MUST be in-scope
+        against `agreedScope` (FR-004, data-model.md's `{txTypes, maxAmount}` interpretation). Any
+        single failure denies the request with NO challenge issued (SC-001) and no distinction
+        made for an unknown/bogus `grantNonce` (spec.md Edge Cases). On success, issues a fresh
+        `TransactionChallenge` bound to this exact `grantNonce`/`txType`/`amount` (FR-005,
+        FR-010).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grantNonce, txType, amount]
+              properties:
+                grantNonce:
+                  type: string
+                  description: Reference to the Agent's active Grant (FR-001) — the same nonce 001-grant's GrantRecordStore uses as its key.
+                txType:
+                  type: string
+                  description: Requested transaction type, checked against agreedScope.txTypes (FR-004).
+                amount:
+                  type: number
+                  description: Requested transaction amount, checked against agreedScope.maxAmount (FR-004).
+      responses:
+        "200":
+          description: Grant-state gate passed; challenge issued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [challengeId, challenge, expiresAt]
+                properties:
+                  challengeId: { type: string, description: "Opaque handle for /transact/respond." }
+                  challenge: { type: string, description: "The value the Agent must sign (FR-006), together with txType and amount — see data-model.md Transaction Signature Payload." }
+                  expiresAt: { type: string, format: date-time, description: "Short-lived by design (spec.md Assumptions)." }
+        "403":
+          description: >
+            Grant not active, out-of-window, or out-of-scope (FR-002/FR-003/FR-004) — no
+            challenge issued (SC-001). Also returned for an unknown/bogus `grantNonce`, not
+            distinguished from any other denial reason (spec.md Edge Cases).
+
+  /transact/respond:
+    post:
+      summary: Challenge-response verification and permit decision
+      description: >
+        Retrieves the `TransactionChallenge` by `challengeId`, marking it consumed at retrieval —
+        before any other check (FR-008, NON-NEGOTIABLE ordering, Constitution Principle V). Then
+        validates, all required: challenge was unconsumed at retrieval and unexpired
+        (FR-008/FR-009), the Grant is still active and in-window (research.md §5 — re-checked
+        here, not just at /transact/request), and the signature verifies against
+        `AgentKeyStore`'s recorded Agent public key for this Grant over the RP's own stored
+        `{challenge, txType, amount}` — never over values resent in this request body (FR-007).
+        Any single failure denies the transaction with no partial permission granted (FR-011,
+        User Story 2). On success, sends an explicit permitted acknowledgment (FR-012) — this
+        feature's endpoint; no downstream business-transaction execution is performed or
+        simulated (FR-013).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeId, signature]
+              properties:
+                challengeId: { type: string }
+                signature:
+                  type: string
+                  description: >
+                    Base64url ECDSA P-256/SHA-256 signature (FR-006, not a WebAuthn assertion) over
+                    the JCS-canonicalized {challenge, txType, amount} the RP itself bound to this
+                    challengeId at issuance — see data-model.md Transaction Signature Payload.
+      responses:
+        "200":
+          description: Transaction permitted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, grantNonce, challengeId]
+                properties:
+                  status: { type: string, enum: [permitted] }
+                  grantNonce: { type: string }
+                  challengeId: { type: string }
+        "409":
+          description: >
+            Challenge already consumed (prior success or prior failed attempt — FR-009), or
+            challenge expired (mirrors 001-grant's nonce_expired handling — data-model.md).
+        "403":
+          description: >
+            Grant no longer active or no longer in-window at the moment of permit decision
+            (research.md §5) — distinct from the identical-looking gate at /transact/request,
+            evaluated again here because FR-011 requires it be true at permit time, not merely at
+            an earlier gate.
+        "422":
+          description: Signature does not verify against the Grant's recorded Agent public key.

@@ -6,6 +6,6 @@
     "lib": ["ES2022", "DOM"],
     "types": ["node"]
   },
-  "references": [{ "path": "../shared" }],
+  "references": [{ "path": "../shared" }, { "path": "../user-client" }],
   "include": ["src"]
 }

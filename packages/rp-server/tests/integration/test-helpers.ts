@@ -8,6 +8,7 @@ import { signSoftwareAssertion } from "@tac/user-client/dist/demo/software-authe
 import { GrantRecordStore } from "../../src/models/grant-record-store.js";
 import { RegisteredPasskeyStore } from "../../src/models/registered-passkey-store.js";
 import { AssuranceCeilingPolicy } from "../../src/models/assurance-ceiling-policy.js";
+import { AgentKeyStore } from "../../src/models/agent-key-store.js";
 import { NegotiationService } from "../../src/services/negotiation-service.js";
 import { CredentialValidationService } from "../../src/services/credential-validation-service.js";
 import { encodeP256CoseKey } from "../../src/services/cose-key.js";
@@ -17,6 +18,7 @@ export interface TestRpContext {
   grantStore: GrantRecordStore;
   passkeyStore: RegisteredPasskeyStore;
   ceilingPolicy: AssuranceCeilingPolicy;
+  agentKeyStore: AgentKeyStore;
   negotiationService: NegotiationService;
   validationService: CredentialValidationService;
   accountId: string;
@@ -29,6 +31,7 @@ export async function setupTestRp(nonceWindowSeconds = 300): Promise<TestRpConte
   const grantStore = new GrantRecordStore();
   const passkeyStore = new RegisteredPasskeyStore();
   const ceilingPolicy = AssuranceCeilingPolicy.defaultPolicy();
+  const agentKeyStore = new AgentKeyStore();
   const negotiationService = new NegotiationService(
     passkeyStore,
     grantStore,
@@ -36,7 +39,7 @@ export async function setupTestRp(nonceWindowSeconds = 300): Promise<TestRpConte
     RP_ID,
     nonceWindowSeconds,
   );
-  const validationService = new CredentialValidationService(grantStore, passkeyStore);
+  const validationService = new CredentialValidationService(grantStore, passkeyStore, agentKeyStore);
 
   const accountId = "test-user";
   const keyPair = await crypto.subtle.generateKey(
@@ -62,6 +65,7 @@ export async function setupTestRp(nonceWindowSeconds = 300): Promise<TestRpConte
     grantStore,
     passkeyStore,
     ceilingPolicy,
+    agentKeyStore,
     negotiationService,
     validationService,
     accountId,
