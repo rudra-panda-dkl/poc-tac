@@ -104,4 +104,8 @@ human-presence semantics" have no dedicated negative-case test — they're satis
 transaction-time signing path has no `@simplewebauthn` dependency at all), not by an explicit
 assertion. 003-revoke: no additional known gaps beyond spec.md's own Feature Boundary (no
 rollback of already-permitted transactions, no in-place scope amendment, no bulk revocation — all
-explicitly out of scope, Constitution Non-Goals). This closes all three planned TAC POC features.
+explicitly out of scope, Constitution Non-Goals). Same pattern again: FR-004's "MUST NOT invent a
+second, locally-signed ceremony" has no dedicated negative-case test — `revocation-service.ts` has
+no `canonicalize`/digest dependency at all, so there's no code path that could attempt a
+ceremony-two-style signing step; satisfied structurally, not by an explicit assertion. This closes
+all three planned TAC POC features.
