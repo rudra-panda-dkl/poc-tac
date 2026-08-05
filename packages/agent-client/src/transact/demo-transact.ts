@@ -1,4 +1,4 @@
-import { computeCredentialDigest, bufferToBase64url, readDemoState } from "@tac/shared";
+import { computeCredentialDigest, bufferToBase64url, readDemoState, writeDemoState } from "@tac/shared";
 import type { AssuranceLevel, UnsignedCredential } from "@tac/shared";
 // Cross-package devDependency (agent-client -> @tac/user-client, demo-only) — reuses the same
 // software authenticator the grant-flow demo uses, rather than re-implementing WebAuthn
@@ -39,7 +39,11 @@ const userPrivateKey = await crypto.subtle.importKey(
 
 const agentKeypair = await getOrCreateAgentKeypair(RP_ID);
 
-// Ceremony one: authenticate + negotiate (FR-003/FR-006/FR-007/FR-010).
+// Ceremony one: authenticate + negotiate (FR-003/FR-006/FR-007/FR-010). Counter picks up where
+// the live rp-server's stored counter for this passkey actually is — not a hardcoded 0 — since
+// this script may run after demo:negotiate/demo:sign (or another demo:transact/demo:revoke run)
+// already advanced it against the same long-lived server process; @simplewebauthn/server rejects
+// any assertion whose counter doesn't strictly increase past what it already has on file.
 const optionsRes = await fetch(`${RP_SERVER}/grant/authenticate/options?accountId=${ACCOUNT_ID}`);
 const options = (await optionsRes.json()) as { challenge: string };
 const ceremonyOne = await signSoftwareAssertion({
@@ -47,7 +51,7 @@ const ceremonyOne = await signSoftwareAssertion({
   credentialId: seededPasskey.credentialId,
   rpId: RP_ID,
   challenge: options.challenge,
-  counter: 0,
+  counter: state.lastCounter ?? 0,
   userVerified: true,
 });
 
@@ -99,6 +103,10 @@ const ceremonyTwo = await signSoftwareAssertion({
   counter: ceremonyOne.newCounter,
   userVerified: true,
 });
+// Persist the counter forward — this is the last WebAuthn assertion this script makes (the
+// transaction request/respond below signs with the Agent's own raw ECDSA key, not the User's
+// passkey), so any later demo script chained after this one needs this value, not a stale one.
+await writeDemoState({ lastCounter: ceremonyTwo.newCounter });
 
 const credential = {
   ...unsignedCredential,
