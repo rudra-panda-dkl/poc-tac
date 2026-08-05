@@ -18,6 +18,44 @@ See each feature's `quickstart.md` (`specs/001-grant/`, `specs/002-transact/`,
 `specs/003-revoke/`) for a walkthrough of the acceptance scenarios (automated and manual), and
 each feature's `tasks.md` for the full task breakdown and status.
 
+## Demo: all three features, live, in one run
+
+The automated test suite (`npx vitest run`) is the authoritative demonstration — each feature's
+`quickstart.md` maps its scenarios to specific test files. To instead *watch* the protocol run
+against a real `rp-server` process, from a User granting an Agent access through a transaction to
+revocation, run these six commands in order from the repo root:
+
+```bash
+npm run seed:passkey --workspace=@tac/rp-server   # seeds one passkey, writes .tac-demo-state.json
+npm run dev --workspace=@tac/rp-server &          # starts rp-server on :4000, reads that seed
+
+npm run demo:negotiate --workspace=@tac/user-client    # 001-grant ceremony one: authenticate + negotiate scope/duration
+npm run demo:keypair --workspace=@tac/agent-client     # 001-grant: Agent generates its own keypair, per-RP
+npm run demo:sign --workspace=@tac/user-client         # 001-grant ceremony two: sign the credential digest -> grant active
+
+npm run demo:transact --workspace=@tac/agent-client    # 002-transact: negotiates its own fresh grant, then a permitted transaction
+npm run demo:revoke --workspace=@tac/user-client       # 003-revoke: negotiates its own fresh grant, revokes it, confirms the next transaction is denied
+```
+
+Expected final output: `demo:sign` prints `{"status":"active",...}`; `demo:transact` ends with
+`{"status":"permitted",...}`; `demo:revoke` ends with `Grant revoked` → `403 grant_not_active` →
+`Confirmed: transaction denied after revocation.`
+
+Notes:
+- `demo:transact` and `demo:revoke` are self-contained — each negotiates and activates its own
+  fresh grant internally rather than reusing the one from `demo:negotiate`/`demo:sign`, so this
+  sequence exercises three independent grants, not one continuous thread. This is deliberate: the
+  Agent's private key is non-extractable and can't cross process boundaries (see
+  `specs/002-transact/quickstart.md`'s Prerequisites), so a script that needs the Agent's key to
+  sign something must generate and use it within its own single process.
+- All commands can be copy-pasted in order, in one shell, with `rp-server` left running in the
+  background throughout — this is deliberately tested and kept working (each demo script reads
+  its WebAuthn signature counter forward from `.tac-demo-state.json` rather than assuming a
+  freshly-seeded server, precisely so chaining like this doesn't break).
+- Cleanup: stop the background `rp-server` process (`kill %1`, or `Ctrl-C` if run in the
+  foreground) and `rm -f .tac-demo-state.json`. The in-memory stores discard all state on exit
+  regardless.
+
 ## Project layout
 
 An npm-workspaces monorepo with one package per protocol actor, plus a `shared` package holding
